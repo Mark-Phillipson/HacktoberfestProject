@@ -10,5 +10,6 @@
 		public const string TEST_REPO_NAME = "test";
 		public const string URL = "http://test";
 		public const string USERNAME = "TestUser";
+		
 	}
 }

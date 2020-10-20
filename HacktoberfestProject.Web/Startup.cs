@@ -2,7 +2,7 @@
 using HacktoberfestProject.Web.Data.Configuration;
 using HacktoberfestProject.Web.Extensions;
 using HacktoberfestProject.Web.Services;
-
+using HacktoberfestProject.Web.Services.Configuration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Rewrite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Octokit;
 
 namespace HacktoberfestProject.Web
 {
@@ -28,11 +29,14 @@ namespace HacktoberfestProject.Web
 			services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 			//Configure CosmosDB Table API
 			services.Configure<TableConfiguration>(Configuration.GetSection("CosmosTableStorage"));
+			services.Configure<GithubConfiguration>(Configuration.GetSection("GitHub"));
+			
+			
 			services.AddSingleton<ITableContext, TableContext>();
-			//services.AddSingleton<IUserRepository, UserRepository>();
-
+			services.AddSingleton(c => { return new GitHubClient(new ProductHeaderValue("HacktoberfestProject")); });
 			services.AddSingleton<IGithubService, GithubService>();
-			services.AddSingleton<ITableService, TableService>();
+			services.AddSingleton<ITrackerEntryService, TrackerEntryService>();
+			services.AddSingleton<IProjectService, ProjectService>();
 
 			services.AddControllersWithViews();
 
@@ -66,10 +70,11 @@ namespace HacktoberfestProject.Web
 
       app.Use(async (ctx, next) =>
       {
-          ctx.Response.Headers.Add("Content-Security-Policy", "default-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com;frame-src *.youtube.com;");
+          ctx.Response.Headers.Add("Content-Security-Policy", "default-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com;frame-src *.youtube.com; img-src 'self' *.githubusercontent.com; style-src-elem 'self';");
           await next();
       });
       
+
 			app.UseEndpoints(endpoints =>
 			{
 				endpoints.MapControllerRoute(

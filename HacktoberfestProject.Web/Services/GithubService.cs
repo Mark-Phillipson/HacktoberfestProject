@@ -1,24 +1,34 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+
 using Microsoft.Extensions.Logging;
+
 using Octokit;
+
 using HacktoberfestProject.Web.Models.Enums;
 using HacktoberfestProject.Web.Models.Helpers;
 using HacktoberfestProject.Web.Tools;
-using System;
+using HacktoberfestProject.Web.Models.DTOs;
+using HacktoberfestProject.Web.Services.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace HacktoberfestProject.Web.Services
 {
 	public class GithubService : IGithubService
 	{
 		private ILogger<GithubService> _logger;
-		private GitHubClient _client = new GitHubClient(new ProductHeaderValue("HacktoberfestProject"));
+		private GitHubClient _client;
+		private readonly GithubConfiguration _githubConfiguration;
 
-		public GithubService(ILogger<GithubService> logger)
+		public GithubService(ILogger<GithubService> logger, IOptions<GithubConfiguration> githubConfiguration, GitHubClient client)
 		{
 			NullChecker.IsNotNull(logger, nameof(logger));
 			_logger = logger;
+			_githubConfiguration = githubConfiguration.Value;
+			_client = client;
+			_client.Credentials = new Credentials(_githubConfiguration.ClientId, _githubConfiguration.ClientSecret);
 		}
 
 		public async Task<List<Models.DTOs.Repository>> GetRepos(string owner)
@@ -31,6 +41,14 @@ namespace HacktoberfestProject.Web.Services
 			return repositories.Select(r => new Models.DTOs.Repository(owner, r.Name, r.Url)).ToList();
 		}
 
+		public async Task<List<Models.DTOs.Contributor>> GetContributorsAsync()
+		{
+			_logger.LogTrace($"Sending request to Github for pull contributors on our repository");
+			var contributors = await _client.Repository.GetAllContributors("Layla-P", "HacktoberfestProject");
+
+			return contributors.Select(rc => new Models.DTOs.Contributor { Name = rc.Login, ImageUrl = rc.AvatarUrl, ProfileUrl = rc.HtmlUrl }).ToList();
+		}
+
 		public async Task<List<Models.DTOs.PullRequest>> GetPullRequestsForRepo(string owner, string name)
 		{
 			_logger.LogTrace($"Sending request to Github for pull requests on repository: {name}");
@@ -41,9 +59,9 @@ namespace HacktoberfestProject.Web.Services
 			return prs.Select(pr => new Models.DTOs.PullRequest(pr.Number, pr.Url)).ToList();
 		}
 
-		public async Task<ServiceResponse<IEnumerable<string>>> SearchOwners(string owner, int limit)
+		public async Task<ServiceResponse<IEnumerable<TypeaheadResult>>> SearchOwners(string owner, int limit)
 		{
-			var searchResults = new List<string>();
+			var searchResults = new List<TypeaheadResult>();
 
 			if (!string.IsNullOrWhiteSpace(owner))
 			{
@@ -57,19 +75,24 @@ namespace HacktoberfestProject.Web.Services
 				if (users == null || !users.Items.Any())
 				{
 					CheckAPILimits();
-					return new ServiceResponse<IEnumerable<string>>
+					return new ServiceResponse<IEnumerable<TypeaheadResult>>
 					{
 						ServiceResponseStatus = ServiceResponseStatus.NotFound,
 						Message = $"No results found for search term {owner}!"
 					};
 				}
 
-				users.Items.ToList().ForEach(u => searchResults.Add(u.Login));
+				users.Items.ToList().ForEach(u => searchResults.Add(
+					new TypeaheadResult
+					{
+						Id = u.Id.ToString(),
+						Name = u.Login
+					}));
 			}
 
 			CheckAPILimits();
 
-			return new ServiceResponse<IEnumerable<string>>
+			return new ServiceResponse<IEnumerable<TypeaheadResult>>
 			{
 				Content = searchResults.Take(limit),
 				ServiceResponseStatus = ServiceResponseStatus.Ok
@@ -92,7 +115,7 @@ namespace HacktoberfestProject.Web.Services
 			bool stateValid = false;
 
 
-			var serviceResponse = new ServiceResponse<PrStatus?> {  ServiceResponseStatus = ServiceResponseStatus.BadRequest};
+			var serviceResponse = new ServiceResponse<PrStatus?> { ServiceResponseStatus = ServiceResponseStatus.BadRequest };
 
 			try
 			{
@@ -130,7 +153,7 @@ namespace HacktoberfestProject.Web.Services
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex,"Failed to aquire data");
+				_logger.LogError(ex, "Failed to aquire data");
 
 			}
 

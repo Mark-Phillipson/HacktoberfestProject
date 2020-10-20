@@ -10,19 +10,25 @@ using HacktoberfestProject.Web.Models;
 using HacktoberfestProject.Web.Models.DTOs;
 using HacktoberfestProject.Web.Services;
 using HacktoberfestProject.Web.ViewModels;
+using HacktoberfestProject.Web.Tools;
 
 namespace HacktoberfestProject.Web.Controllers
 {
 	public class HomeController : Controller
 	{
 		private readonly IHttpContextAccessor _contextAccessor;
-		private readonly ITableService _tableService;
+		private readonly ITrackerEntryService _tableService;
+		private readonly IGithubService _githubService;
 		private const string GitHubUsernameClaimType = "urn:github:login";
 
-		public HomeController(IHttpContextAccessor contextAccessor, ITableService tableService)
+		public HomeController(IHttpContextAccessor contextAccessor, ITrackerEntryService tableService, IGithubService githubService)
 		{
+			NullChecker.IsNotNull(contextAccessor, nameof(contextAccessor));
+			NullChecker.IsNotNull(tableService, nameof(tableService));
+			NullChecker.IsNotNull(githubService, nameof(githubService));
 			_contextAccessor = contextAccessor;
 			_tableService = tableService;
+			_githubService = githubService;
 		}
 
 		public async Task<IActionResult> Index()
@@ -39,6 +45,14 @@ namespace HacktoberfestProject.Web.Controllers
 				}
 			}
 			return View(user);
+		}
+
+
+		
+		[HttpGet]
+		public async Task<IActionResult> About()
+		{
+			return View(await _githubService.GetContributorsAsync());
 		}
 
 		[Authorize]
@@ -63,7 +77,7 @@ namespace HacktoberfestProject.Web.Controllers
 			await _tableService.AddPrAsync(addPrViewModel.UserName, addPrViewModel.Owner,
 				addPrViewModel.Repository, new PullRequest(addPrViewModel.PrNumber, addPrViewModel.PrUrl));
 
-			return RedirectToAction("Index");
+			return RedirectToAction("Index", "Home");
 		}
 
 		public IActionResult Privacy()
